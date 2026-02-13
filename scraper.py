@@ -6,11 +6,11 @@ import os
 # --- 配置区 ---
 BASE_URL = "https://cosylab.iiitd.edu.in/flavordb/entities_json?id="
 SAVE_FILE = "flavordb_data.csv"
-MAX_ID = 2600  # 设定一个较大的上限
-BATCH_SIZE = 20 # 每抓20个存一次档
+MAX_ID = 2600  # 设定上限
+BATCH_SIZE = 20 # 每20个存档一次
 
 def get_last_id():
-    """检查已保存的文件，获取最后一个 ID"""
+    """检查进度：看看到底抓到哪了"""
     if os.path.exists(SAVE_FILE):
         try:
             df = pd.read_csv(SAVE_FILE)
@@ -24,49 +24,67 @@ def run_scraper():
     last_id = get_last_id()
     start_id = last_id + 1
     
-    # 读取已有数据，如果没有则创建空列表
+    # 加载已有数据
     if os.path.exists(SAVE_FILE):
-        results = pd.read_csv(SAVE_FILE).to_dict('records')
+        try:
+            results = pd.read_csv(SAVE_FILE).to_dict('records')
+        except:
+            results = []
     else:
         results = []
 
-    print(f"🔄 检查进度：已完成至 ID {last_id}。准备从 {start_id} 开始...")
+    print(f"🔄 正在检查断点... 已完成至 ID {last_id}。准备从 {start_id} 开始捕捉！")
 
     if start_id > MAX_ID:
-        print("✨ 所有数据已抓取完毕！")
+        print("✨ 恭喜！全量数据已抓取完毕。")
         return
 
     for i in range(start_id, MAX_ID + 1):
         try:
-            # 增加 headers 模拟浏览器，更安全
             headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
-            response = requests.get(f"{BASE_URL}{i}", timeout=10, headers=headers)
+            response = requests.get(f"{BASE_URL}{i}", timeout=15, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                # 核心字段提取
+                molecules = data.get("molecules", [])
+                
+                # 提取细节
+                flavor_set = set()
+                molecule_names = []
+                for m in molecules:
+                    profiles = m.get("flavor_profile", "")
+                    if profiles:
+                        flavor_set.update(profiles.split("@"))
+                    m_name = m.get("common_name")
+                    if m_name:
+                        molecule_names.append(m_name)
+                
+                # 这里就是你刚才报错的地方，这次我已经帮你完整闭合了
                 results.append({
                     "id": i,
                     "name": data.get("entity_alias_readable", "Unknown"),
                     "category": data.get("category_readable", "Unknown"),
-                    "flavors": ", ".join(set(m.get("flavor_profile", "") for m in data.get("molecules", []) if m.get("flavor_profile")))
+                    "flavors": ", ".join(sorted(list(flavor_set))),
+                    "molecules_count": len(molecules),
+                    "sample_molecules": ", ".join(molecule_names[:10])
                 })
-                print(f"✅ ID {i}: {data.get('entity_alias_readable', '未知食材')} 抓取成功！")
+                print(f"✅ ID {i}: {data.get('entity_alias_readable', '未知')} | 分子数: {len(molecules)}")
+            
             elif response.status_code == 404:
-                print(f"⏩ ID {i} 空缺 (404)")
+                print(f"⏩ ID {i}: 数据库空缺 (404)")
             
         except Exception as e:
-            print(f"❌ ID {i} 错误: {e}")
-            break # 遇到严重错误（如断网）先停止，下次运行会自动重连
+            print(f"❌ ID {i} 发生故障: {e}")
+            break 
 
-        # 分段保存
+        # 自动存档
         if i % BATCH_SIZE == 0:
             pd.DataFrame(results).to_csv(SAVE_FILE, index=False)
-            print(f"💾 进度已保存至 ID {i}")
-            time.sleep(0.5) # 给服务器喘口气
+            print(f"💾 进度已安全存盘 (ID {i})")
+            time.sleep(1)
 
     pd.DataFrame(results).to_csv(SAVE_FILE, index=False)
-    print("🏁 本次抓取结束。")
+    print(f"🏁 捕捉任务结束。")
 
 if __name__ == "__main__":
     run_scraper()
