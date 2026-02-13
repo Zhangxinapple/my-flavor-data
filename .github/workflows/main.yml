@@ -29,4 +29,5 @@ jobs:
           git config --global user.email "bot@github.com"
           git add flavordb_data.csv
           git commit -m "Update flavor data [$(date)]" || exit 0
+          git pull --rebase
           git push
