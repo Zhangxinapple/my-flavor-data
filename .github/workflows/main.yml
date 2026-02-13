@@ -1,0 +1,32 @@
+name: FlavorDB-Auto-Scraper
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天凌晨自动运行一次
+  workflow_dispatch:      # 允许我们现在点击手动按钮运行
+
+jobs:
+  scrape-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 安装必要的插件
+        run: pip install requests pandas
+
+      - name: 启动抓取程序
+        run: python scraper.py
+
+      - name: 将新抓取的数据存入仓库
+        run: |
+          git config --global user.name "FlavorBot"
+          git config --global user.email "bot@github.com"
+          git add flavordb_data.csv
+          git commit -m "Update flavor data [$(date)]" || exit 0
+          git push
